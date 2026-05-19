@@ -9,6 +9,53 @@ header('Content-Type: application/json; charset=utf-8');
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+if ($action === 'get_lab_reservation_status') {
+    $conn->query("CREATE TABLE IF NOT EXISTS system_settings (setting_key VARCHAR(100) PRIMARY KEY, setting_value VARCHAR(255) NOT NULL DEFAULT '1')");
+    $labs = ['524','526','528','530','542','544'];
+    $data = [];
+    foreach ($labs as $lab) {
+        $key = 'lab_reservation_' . $lab;
+        $res = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key=? LIMIT 1");
+        $res->bind_param('s', $key); $res->execute();
+        $row = $res->get_result()->fetch_assoc(); $res->close();
+        if ($row) {
+            $data[$lab] = $row['setting_value'] === '1';
+        } else {
+            // Default enabled — insert the row
+            $ins = $conn->prepare("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES (?, '1')");
+            $ins->bind_param('s', $key); $ins->execute(); $ins->close();
+            $data[$lab] = true;
+        }
+    }
+    echo json_encode(['success'=>true,'data'=>$data]); exit;
+}
+
+if ($action === 'toggle_lab_reservation') {
+    if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+        echo json_encode(['success'=>false,'message'=>'Unauthorized.']); exit;
+    }
+    $lab    = trim($_POST['lab'] ?? '');
+    $enable = intval($_POST['enable'] ?? 1);
+    $allowed = ['524','526','528','530','542','544'];
+    if (!in_array($lab, $allowed)) {
+        echo json_encode(['success'=>false,'message'=>'Invalid lab.']); exit;
+    }
+    $conn->query("CREATE TABLE IF NOT EXISTS system_settings (setting_key VARCHAR(100) PRIMARY KEY, setting_value VARCHAR(255) NOT NULL DEFAULT '1')");
+    $key = 'lab_reservation_' . $lab;
+    $val = $enable ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value=?");
+    $stmt->bind_param('sss', $key, $val, $val);
+    if ($stmt->execute()) {
+        $msg = $enable
+            ? "Lab {$lab} reservations are now ENABLED."
+            : "Lab {$lab} reservations are now DISABLED. Students cannot reserve in Lab {$lab}.";
+        echo json_encode(['success'=>true,'message'=>$msg,'enabled'=>(bool)$enable,'lab'=>$lab]);
+    } else {
+        echo json_encode(['success'=>false,'message'=>'Failed to update setting.']);
+    }
+    $stmt->close(); exit;
+}
+
 if ($action === 'get_pc_status') {
     $lab = trim($_POST['lab'] ?? $_GET['lab'] ?? '');
     if (!$lab) { echo json_encode(['success'=>false,'message'=>'Lab required.']); exit; }
@@ -301,6 +348,19 @@ if ($action === 'reset_sessions') {
     echo json_encode(['success'=>true,'message'=>'All sessions reset to 30.']); exit;
 }
 
+if ($action === 'reset_student_session') {
+    $id = intval($_POST['id'] ?? 0);
+    $sessions = isset($_POST['sessions']) ? intval($_POST['sessions']) : 30;
+    if ($id <= 0) { echo json_encode(['success'=>false,'message'=>'Invalid student ID.']); exit; }
+    if ($sessions < 0) { $sessions = 0; }
+    $stmt = $conn->prepare("UPDATE students SET remaining_session=? WHERE id=?");
+    $stmt->bind_param('ii', $sessions, $id);
+    echo $stmt->execute()
+        ? json_encode(['success'=>true,'message'=>'Sessions reset to '.$sessions.' successfully.'])
+        : json_encode(['success'=>false,'message'=>'Failed to reset sessions.']);
+    $stmt->close(); exit;
+}
+
 if ($action === 'post_announcement') {
     $msg = trim($_POST['message'] ?? '');
     if (!$msg) { echo json_encode(['success'=>false,'message'=>'Announcement cannot be empty.']); exit; }
@@ -327,6 +387,7 @@ if ($action === 'sitin') {
     $id_number = trim($_POST['id_number'] ?? '');
     $purpose   = trim($_POST['purpose']   ?? '');
     $lab       = trim($_POST['lab']       ?? '');
+    $pc_number = intval($_POST['pc_number'] ?? 0);   // optional
     if (!$id_number||!$purpose||!$lab) { echo json_encode(['success'=>false,'message'=>'Fill in all fields.']); exit; }
 
     $s = $conn->prepare("SELECT id, remaining_session FROM students WHERE id_number=?");
@@ -338,22 +399,51 @@ if ($action === 'sitin') {
 
     $chk = $conn->prepare("SELECT id FROM sitin_records WHERE student_id=? AND status='active'");
     $chk->bind_param('i',$stu['id']); $chk->execute(); $chk->store_result();
-    if ($chk->num_rows > 0) { 
+    if ($chk->num_rows > 0) {
         $chk->close();
-        echo json_encode(['success'=>false,'message'=>'This student is already sitting in. They must log out first before sitting in again.']); 
-        exit; 
+        echo json_encode(['success'=>false,'message'=>'This student is already sitting in. They must log out first before sitting in again.']);
+        exit;
     }
     $chk->close();
 
-    $stmt = $conn->prepare("INSERT INTO sitin_records (student_id,purpose,lab,login_time,date,status) VALUES (?,?,?,NOW(),CURDATE(),'active')");
-    $stmt->bind_param('iss',$stu['id'],$purpose,$lab);
-    if ($stmt->execute()) {
+    // If a PC was chosen, verify it is still available
+    if ($pc_number > 0) {
+        $pcChk = $conn->prepare("SELECT is_available FROM pc_status WHERE lab=? AND pc_number=? LIMIT 1");
+        $pcChk->bind_param('si', $lab, $pc_number); $pcChk->execute();
+        $pcRow = $pcChk->get_result()->fetch_assoc(); $pcChk->close();
+        // Row might not exist yet (means it has never been set → treat as available)
+        if ($pcRow && !$pcRow['is_available']) {
+            echo json_encode(['success'=>false,'message'=>"PC {$pc_number} in Lab {$lab} is already occupied. Please choose another PC."]);
+            exit;
+        }
+    }
+
+    $conn->begin_transaction();
+    try {
+        $stmt = $conn->prepare("INSERT INTO sitin_records (student_id,purpose,lab,login_time,date,status) VALUES (?,?,?,NOW(),CURDATE(),'active')");
+        $stmt->bind_param('iss',$stu['id'],$purpose,$lab);
+        $stmt->execute();
+        $stmt->close();
+
         $conn->query("UPDATE students SET remaining_session = remaining_session - 1 WHERE id = ".intval($stu['id']));
-        echo json_encode(['success'=>true,'message'=>'Student sat in successfully.']);
-    } else {
+
+        // Mark the chosen PC as occupied
+        if ($pc_number > 0) {
+            $upsert = $conn->prepare("INSERT INTO pc_status (lab, pc_number, is_available) VALUES (?, ?, 0)
+                ON DUPLICATE KEY UPDATE is_available = 0, reserved_by = NULL, reservation_id = NULL");
+            $upsert->bind_param('si', $lab, $pc_number);
+            $upsert->execute();
+            $upsert->close();
+        }
+
+        $conn->commit();
+        $pcMsg = $pc_number > 0 ? " (PC {$pc_number})" : '';
+        echo json_encode(['success'=>true,'message'=>'Student sat in successfully.'.$pcMsg]);
+    } catch (Exception $e) {
+        $conn->rollback();
         echo json_encode(['success'=>false,'message'=>'Sit-in failed.']);
     }
-    $stmt->close(); exit;
+    exit;
 }
 
 if ($action === 'search_student') {

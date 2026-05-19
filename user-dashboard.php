@@ -84,6 +84,7 @@ $isSittingIn = isset($_SESSION['is_sitting_in']) ? $_SESSION['is_sitting_in'] : 
         <li class="nav-item"><a class="nav-link-custom active-page" href="user-dashboard.php">Home</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-editprofile.php">Edit Profile</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-history.php">History</a></li>
+        <li class="nav-item"><a class="nav-link-custom" href="user-sitin-sessions.php">Sit-In Sessions</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-reservation.php">Reservation</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-software.php">Lab Software</a></li>
       </ul>

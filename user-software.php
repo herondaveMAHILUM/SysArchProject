@@ -110,6 +110,7 @@ $labs = ['524','526','528','530','542','544'];
         <li class="nav-item"><a class="nav-link-custom" href="user-dashboard.php">Home</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-editprofile.php">Edit Profile</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-history.php">History</a></li>
+        <li class="nav-item"><a class="nav-link-custom" href="user-sitin-sessions.php">Sit-In Sessions</a></li>
         <li class="nav-item"><a class="nav-link-custom" href="user-reservation.php">Reservation</a></li>
         <li class="nav-item"><a class="nav-link-custom active-page" href="user-software.php">Lab Software</a></li>
       </ul>

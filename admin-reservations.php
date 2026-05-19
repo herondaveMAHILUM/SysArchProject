@@ -40,6 +40,19 @@
     .lab-card.selected{border-color:var(--purple-main);background:linear-gradient(135deg,var(--purple-pale) 0%,#ddd6fe 100%);}
     .lab-card-name{font-weight:700;color:var(--purple-deep);}
     .lab-card-status{font-size:.75rem;color:#666;margin-top:.2rem;}
+    /* Lab reservation toggle panel */
+    .lab-toggle-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.75rem;margin-bottom:1rem;}
+    .lab-toggle-card{background:#fff;border:2px solid var(--purple-pale);border-radius:12px;padding:.85rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem;transition:border-color .2s;}
+    .lab-toggle-card.enabled{border-color:#bbf7d0;background:#f0fdf4;}
+    .lab-toggle-card.disabled{border-color:#fecaca;background:#fef2f2;}
+    .lab-toggle-name{font-weight:700;font-size:.9rem;color:var(--purple-deep);}
+    .lab-toggle-status{font-size:.72rem;font-weight:700;margin-top:.1rem;}
+    .lab-toggle-status.on{color:#16a34a;}
+    .lab-toggle-status.off{color:#dc2626;}
+    .lab-sw{position:relative;width:42px;height:23px;background:#ccc;border-radius:12px;cursor:pointer;transition:background .25s;flex-shrink:0;}
+    .lab-sw.on{background:#22c55e;}
+    .lab-sw::after{content:'';position:absolute;top:2px;left:2px;width:19px;height:19px;background:#fff;border-radius:50%;transition:transform .25s;}
+    .lab-sw.on::after{transform:translateX(19px);}
     .pc-grid-container{display:none;margin:1.5rem 0;}
     .pc-grid-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;}
     .pc-grid-title{font-weight:700;font-size:1rem;color:var(--purple-deep);}
@@ -91,7 +104,7 @@
     <div class="dash-card">
       <h2 class="page-title">Reservation Management</h2>
 
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <div class="d-flex gap-2 align-items-center">
           <button class="btn" onclick="expireOldReservations()" style="background:#f59e0b;color:#fff;border:none;border-radius:8px;padding:.5rem 1rem;font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer;font-size:.85rem;">Expire Old</button>
           <div class="auto-expire-toggle">
@@ -104,6 +117,14 @@
           </div>
         </div>
         <button class="btn" onclick="exportToCSV()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:.5rem 1rem;font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer;font-size:.85rem;">Export CSV</button>
+      </div>
+
+      <!-- Per-Lab Reservation Toggles -->
+      <div style="background:#f8f5ff;border-radius:12px;padding:.9rem 1rem;margin-bottom:1rem;">
+        <div style="font-size:.78rem;font-weight:700;color:var(--purple-deep);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem;">🔒 Lab Reservation Access</div>
+        <div class="lab-toggle-grid" id="labToggleGrid">
+          <!-- rendered by JS -->
+        </div>
       </div>
 
       <div class="d-flex mb-3">
@@ -613,6 +634,72 @@ function escapeHtml(text) {
 
 loadPending();
 startAutoRefresh();
+loadLabReservationStatuses();
+
+var labStatuses = {};
+var LABS = ['524','526','528','530','542','544'];
+
+function loadLabReservationStatuses() {
+  api({ action: 'get_lab_reservation_status' }).then(function(j) {
+    if (j.success) {
+      labStatuses = j.data;
+      renderLabToggles();
+    }
+  }).catch(function() {});
+}
+
+function renderLabToggles() {
+  var grid = document.getElementById('labToggleGrid');
+  grid.innerHTML = '';
+  LABS.forEach(function(lab) {
+    var enabled = labStatuses[lab] !== false;
+    var card = document.createElement('div');
+    card.className = 'lab-toggle-card ' + (enabled ? 'enabled' : 'disabled');
+    card.id = 'lab-card-' + lab;
+    card.innerHTML =
+      '<div>' +
+        '<div class="lab-toggle-name">Lab ' + lab + '</div>' +
+        '<div class="lab-toggle-status ' + (enabled ? 'on' : 'off') + '" id="lab-status-text-' + lab + '">' +
+          (enabled ? '✓ Reservations Open' : '✗ Reservations Closed') +
+        '</div>' +
+      '</div>' +
+      '<div class="lab-sw ' + (enabled ? 'on' : '') + '" id="lab-sw-' + lab + '" onclick="toggleLabReservation(\'' + lab + '\')"></div>';
+    grid.appendChild(card);
+  });
+}
+
+function toggleLabReservation(lab) {
+  var currentlyEnabled = labStatuses[lab] !== false;
+  var newState = currentlyEnabled ? 0 : 1;
+  // Optimistic UI update
+  labStatuses[lab] = newState === 1;
+  updateLabToggleUI(lab, newState === 1);
+  api({ action: 'toggle_lab_reservation', lab: lab, enable: newState })
+    .then(function(j) {
+      simsToast(j.message, j.success);
+      if (!j.success) {
+        // Revert on failure
+        labStatuses[lab] = currentlyEnabled;
+        updateLabToggleUI(lab, currentlyEnabled);
+      }
+    })
+    .catch(function(e) {
+      simsToast(e.message, false);
+      labStatuses[lab] = currentlyEnabled;
+      updateLabToggleUI(lab, currentlyEnabled);
+    });
+}
+
+function updateLabToggleUI(lab, enabled) {
+  var card = document.getElementById('lab-card-' + lab);
+  var sw   = document.getElementById('lab-sw-' + lab);
+  var txt  = document.getElementById('lab-status-text-' + lab);
+  if (!card) return;
+  card.className = 'lab-toggle-card ' + (enabled ? 'enabled' : 'disabled');
+  sw.className   = 'lab-sw ' + (enabled ? 'on' : '');
+  txt.className  = 'lab-toggle-status ' + (enabled ? 'on' : 'off');
+  txt.textContent = enabled ? '✓ Reservations Open' : '✗ Reservations Closed';
+}
 </script>
 </body>
 </html>

@@ -10,6 +10,19 @@ if (!isset($_SESSION['student_id'])) {
     exit;
 }
 
+// Ensure system_settings table exists
+$conn->query("CREATE TABLE IF NOT EXISTS system_settings (setting_key VARCHAR(100) PRIMARY KEY, setting_value VARCHAR(255) NOT NULL DEFAULT '1')");
+
+// Check global reservation toggle
+$settingRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='reservation_enabled' LIMIT 1");
+if ($settingRes && $settingRes->num_rows > 0) {
+    $settingRow = $settingRes->fetch_assoc();
+    if ($settingRow['setting_value'] !== '1') {
+        echo json_encode(['success' => false, 'message' => 'Reservations are currently disabled by the administrator. Please try again later.']);
+        exit;
+    }
+}
+
 $activeChk = $conn->prepare("SELECT id FROM sitin_records WHERE student_id = ? AND status = 'active'");
 $activeChk->bind_param('i', $_SESSION['student_id']);
 $activeChk->execute();
@@ -21,11 +34,11 @@ if ($activeChk->num_rows > 0) {
 }
 $activeChk->close();
 
-$sid     = $_SESSION['student_id'];
-$purpose = trim($_POST['purpose'] ?? '');
-$lab     = trim($_POST['lab']     ?? '');
-$time_in = trim($_POST['time_in'] ?? '');
-$date    = trim($_POST['date']    ?? '');
+$sid       = $_SESSION['student_id'];
+$purpose   = trim($_POST['purpose']   ?? '');
+$lab       = trim($_POST['lab']       ?? '');
+$time_in   = trim($_POST['time_in']   ?? '');
+$date      = trim($_POST['date']      ?? '');
 $pc_number = intval($_POST['pc_number'] ?? 0);
 
 if (!$purpose || !$lab || !$time_in || !$date) {
@@ -33,11 +46,27 @@ if (!$purpose || !$lab || !$time_in || !$date) {
     exit;
 }
 
-$allowedLabs = ['524', '526', '528', 'Mac Lab'];
+$allowedLabs = ['524', '526', '528', '530', '542', '544'];
 if (!in_array($lab, $allowedLabs, true)) {
     echo json_encode(['success' => false, 'message' => 'Invalid laboratory selected.']);
     exit;
 }
+
+// ── Per-lab reservation toggle check ──────────────────────────────────────────
+$labKey     = 'lab_reservation_' . $lab;
+$labSetting = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key=? LIMIT 1");
+$labSetting->bind_param('s', $labKey);
+$labSetting->execute();
+$labRow = $labSetting->get_result()->fetch_assoc();
+$labSetting->close();
+
+// Default is enabled (true) if no row exists yet
+if ($labRow && $labRow['setting_value'] === '0') {
+    echo json_encode(['success' => false, 'message' => "Reservations for Lab {$lab} are currently closed by the administrator. Please choose a different lab or try again later."]);
+    exit;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 if ($pc_number <= 0) {
     echo json_encode(['success' => false, 'message' => 'Please select a valid PC number.']);
     exit;
@@ -91,7 +120,7 @@ try {
     $notifStmt->bind_param('isss', $sid, $lab, $time_in, $date);
     $notifStmt->execute();
     $notifStmt->close();
-    
+
     $conn->commit();
     echo json_encode(['success' => true, 'message' => 'Reservation submitted successfully! Waiting for admin approval.']);
 } catch (Exception $e) {

@@ -21,6 +21,8 @@
     .btn-edit:hover{background:var(--purple-deep);}
     .btn-delete{background:#ef4444;border:none;color:#fff;border-radius:6px;padding:.3rem .85rem;font-size:.82rem;font-weight:600;font-family:'Nunito',sans-serif;cursor:pointer;}
     .btn-delete:hover{background:#dc2626;}
+    .btn-reset-sess{background:#f59e0b;border:none;color:#fff;border-radius:6px;padding:.3rem .85rem;font-size:.82rem;font-weight:600;font-family:'Nunito',sans-serif;cursor:pointer;}
+    .btn-reset-sess:hover{background:#d97706;}
     table.dataTable thead th{font-weight:700;color:var(--purple-deep);font-size:.88rem;}
     table.dataTable tbody td{font-size:.88rem;vertical-align:middle;}
     .modal-content{border-radius:16px;border:none;box-shadow:0 8px 40px rgba(59,7,100,.18);}
@@ -187,6 +189,27 @@
   </div>
 </div>
 
+<div class="modal fade" id="resetSessionModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Reset Student Sessions</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body px-4 py-3">
+        <input type="hidden" id="resetSess_id">
+        <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:1rem;margin-bottom:1rem;">
+          <div style="font-weight:700;color:#92400e;font-size:.9rem;margin-bottom:.3rem;">⚠️ Confirm Session Reset</div>
+          <div style="color:#78350f;font-size:.85rem;">This will reset <strong id="resetSess_name"></strong>'s sessions back to 30. Current sessions: <strong id="resetSess_current"></strong>.</div>
+        </div>
+        <label class="form-label" style="font-size:.85rem;font-weight:700;">Set sessions to:</label>
+        <input type="number" class="form-control" id="resetSess_value" value="30" min="0" max="999">
+      </div>
+      <div class="modal-footer border-0 px-4 pb-4 gap-2">
+        <button class="btn-modal-cancel" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-modal-save" id="confirmResetSessBtn" style="background:#f59e0b;">Reset Sessions</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="logoutModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;padding:2rem;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(59,7,100,.18);">
     <h5 style="font-weight:700;color:#3b0764;margin-bottom:.8rem;">Confirm Logout</h5>
@@ -227,7 +250,7 @@ function loadStudents() {
     var tbody = document.getElementById('studentsTbody');
     tbody.innerHTML = '';
     (j.data||[]).forEach(function(s){
-      tbody.innerHTML += '<tr><td>'+s.id_number+'</td><td>'+s.name+'</td><td>'+s.year_level+'</td><td>'+s.course+'</td><td>'+s.remaining_session+'</td><td><button class="btn btn-edit me-1" onclick="openEdit('+s.id+')">Edit</button><button class="btn btn-delete" onclick="deleteStudent('+s.id+')">Delete</button></td></tr>';
+      tbody.innerHTML += '<tr><td>'+s.id_number+'</td><td>'+s.name+'</td><td>'+s.year_level+'</td><td>'+s.course+'</td><td>'+s.remaining_session+'</td><td><button class="btn btn-edit me-1" onclick="openEdit('+s.id+')">Edit</button><button class="btn btn-reset-sess me-1" onclick="openResetSessionModal('+s.id+',\''+s.name+'\','+s.remaining_session+')">Reset Sessions</button><button class="btn btn-delete" onclick="deleteStudent('+s.id+')">Delete</button></td></tr>';
     });
     if (table) table.destroy();
     table = $('#studentsTable').DataTable({ columnDefs:[{orderable:false,targets:5}] });
@@ -262,6 +285,26 @@ function deleteStudent(id) {
   if (!confirm('Delete this student? This cannot be undone.')) return;
   api({ action:'delete_student', id:id }).then(function(j){ simsToast(j.message,j.success); if(j.success) loadStudents(); });
 }
+
+function openResetSessionModal(id, name, currentSessions) {
+  document.getElementById('resetSess_id').value = id;
+  document.getElementById('resetSess_name').textContent = name;
+  document.getElementById('resetSess_current').textContent = currentSessions;
+  document.getElementById('resetSess_value').value = 30;
+  new bootstrap.Modal(document.getElementById('resetSessionModal')).show();
+}
+
+document.getElementById('confirmResetSessBtn').addEventListener('click', function() {
+  var id = document.getElementById('resetSess_id').value;
+  var val = parseInt(document.getElementById('resetSess_value').value);
+  if (isNaN(val) || val < 0) { simsToast('Please enter a valid session count.', false); return; }
+  api({ action:'reset_student_session', id:id, sessions:val })
+  .then(function(j) {
+    simsToast(j.message, j.success);
+    if (j.success) { bootstrap.Modal.getInstance(document.getElementById('resetSessionModal')).hide(); loadStudents(); }
+  })
+  .catch(function(e){ simsToast(e.message, false); });
+});
 
 document.getElementById('resetAllBtn').addEventListener('click', function() {
   if (!confirm('Reset ALL student sessions to 30?')) return;

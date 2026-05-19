@@ -13,10 +13,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <link href="style.css" rel="stylesheet"/>
   <style>
-    .admin-nav-link{color:rgba(255,255,255,.8)!important;font-weight:500;font-size:.88rem;padding:.38rem .75rem!important;text-decoration:none;}
-    .admin-nav-link:hover{color:var(--purple-light)!important;}
-    .btn-logout-admin{background:#ef4444;border:none;color:#fff;border-radius:8px;padding:.38rem 1.1rem;font-size:.9rem;font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer;}
-    .btn-logout-admin:hover{background:#dc2626;}
     .page-title{font-size:1.8rem;font-weight:700;color:var(--purple-deep);text-align:center;margin-bottom:1.6rem;}
 
     /* Summary stat cards */
@@ -60,30 +56,7 @@
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg">
-  <div class="container-fluid">
-    <a class="navbar-brand d-flex align-items-center gap-2 text-decoration-none" href="admin-dashboard.php">
-      <img src="assets/ucmainlogo.png" alt="UC Logo" class="brand-logo-img">
-      <img src="assets/uccccslogo.png" alt="CCS Logo" class="brand-ccs-img">
-      <span class="brand-name">CCS Sit-In Monitoring System</span>
-    </a>
-    <button class="navbar-toggler ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#adminNav" style="border-color:rgba(255,255,255,0.3)">
-      <span class="navbar-toggler-icon" style="filter:invert(1)"></span>
-    </button>
-    <div class="collapse navbar-collapse justify-content-end gap-1" id="adminNav">
-      <ul class="navbar-nav align-items-center gap-0 me-2">
-        <li class="nav-item"><a class="admin-nav-link" href="admin-dashboard.php">Home</a></li>
-        <li class="nav-item"><a class="admin-nav-link" href="#" data-bs-toggle="modal" data-bs-target="#searchModal">Search</a></li>
-        <li class="nav-item"><a class="admin-nav-link" href="admin-students.php">Students</a></li>
-        <li class="nav-item"><a class="admin-nav-link" href="admin-sitinrecords.php">View Sit-in Records</a></li>
-        <li class="nav-item"><a class="admin-nav-link active" href="admin-sitin-summary.php">Sit-in Summary</a></li>
-        <li class="nav-item"><a class="admin-nav-link" href="admin-feedback.php">Feedback Reports</a></li>
-        <li class="nav-item"><a class="admin-nav-link" href="admin-reservations.php">Reservations</a></li>
-      </ul>
-      <button class="btn btn-logout-admin" onclick="document.getElementById('logoutModal').style.display='flex'">Log out</button>
-    </div>
-  </div>
-</nav>
+<?php include 'php/admin_nav.php'; ?>
 
 <div class="main-wrap">
   <div class="container-fluid px-0">
@@ -195,24 +168,7 @@
   </div>
 </div>
 
-<!-- Search Modal (shared) -->
-<div class="modal fade" id="searchModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
-    <div class="modal-content" style="border-radius:16px;border:none;">
-      <div class="modal-header" style="border-bottom:2px solid var(--purple-pale);padding:1.2rem 1.5rem;">
-        <h5 class="modal-title" style="font-weight:700;color:var(--purple-deep);font-size:1.1rem;">Search Student</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body px-4 py-3">
-        <p class="text-muted" style="font-size:.88rem;">Use the Search function on the Sit-in Records page to add a new sit-in.</p>
-      </div>
-      <div class="modal-footer border-0 px-4 pb-4">
-        <a href="admin-sitinrecords.php" class="btn btn-sm" style="background:var(--purple-main);color:#fff;border-radius:8px;font-weight:700;">Go to Sit-in Records</a>
-        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
+
 
 <div id="simsToast">
   <span id="simsToastMsg"></span>

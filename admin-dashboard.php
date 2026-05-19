@@ -15,8 +15,6 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
   <link href="style.css" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    .admin-nav-link{color:rgba(255,255,255,.8)!important;font-weight:500;font-size:.88rem;padding:.38rem .75rem!important;transition:color .2s;text-decoration:none;}
-    .admin-nav-link:hover{color:var(--purple-light)!important;}
     .btn-logout-admin{background:#ef4444;border:none;color:#fff;border-radius:8px;padding:.38rem 1.1rem;font-size:.9rem;font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer;}
     .btn-logout-admin:hover{background:#dc2626;}
     .stat-pill{font-size:.97rem;font-weight:700;color:var(--purple-deep);margin-bottom:.35rem;}
@@ -52,7 +50,18 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
     .sess-chip.ok{background:var(--purple-main);}
     .sess-chip.low{background:#f59e0b;}
     .sess-chip.zero{background:#ef4444;}
-    .sitin-label{font-size:.83rem;font-weight:600;color:#888;margin-bottom:.2rem;}
+    /* PC grid inside modal */
+    .modal-pc-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:.3rem;margin:.5rem 0;}
+    .modal-pc-seat{background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:6px;padding:.35rem .1rem;text-align:center;cursor:pointer;transition:all .12s;}
+    .modal-pc-seat:hover{border-color:#7c3aed;background:#ede9fe;transform:scale(1.06);}
+    .modal-pc-seat.occupied{background:#fef2f2;border-color:#fecaca;cursor:not-allowed;opacity:.65;}
+    .modal-pc-seat.selected{background:#ede9fe;border-color:#7c3aed;box-shadow:0 0 0 2px rgba(124,58,237,.25);}
+    .modal-pc-num{font-weight:700;font-size:.65rem;color:#333;line-height:1;}
+    .modal-pc-icon{font-size:.9rem;line-height:1.2;}
+    .pc-pick-legend{display:flex;gap:.8rem;font-size:.75rem;font-weight:600;margin-bottom:.5rem;flex-wrap:wrap;}
+    .pc-pick-legend span{display:flex;align-items:center;gap:.3rem;}
+    .pc-pick-dot{width:10px;height:10px;border-radius:3px;display:inline-block;}
+    .selected-pc-badge{display:inline-block;background:#7c3aed;color:#fff;border-radius:8px;padding:.2rem .7rem;font-size:.8rem;font-weight:700;margin-top:.4rem;}
     #simsToast{position:fixed;top:1.2rem;right:1.2rem;z-index:99999;min-width:300px;max-width:420px;padding:1rem 1.2rem;border-radius:12px;color:#fff;font-family:'Nunito',sans-serif;font-weight:600;font-size:.95rem;display:flex;align-items:center;justify-content:space-between;gap:.8rem;box-shadow:0 8px 30px rgba(0,0,0,.18);opacity:0;transform:translateY(-12px);transition:opacity .3s,transform .3s;pointer-events:none;background:#16a34a;}
     #simsToast.show{opacity:1;transform:translateY(0);pointer-events:auto;}
     #toastClose{background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer;padding:0;opacity:.8;flex-shrink:0;}
@@ -90,8 +99,9 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
   </div>
 </div>
 
+<!-- ── Sit-In Modal ─────────────────────────────────────────────────────── -->
 <div class="modal fade" id="searchModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:560px;">
     <div class="modal-content">
 
       <div class="modal-header">
@@ -99,8 +109,9 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
-      <div class="modal-body px-4 py-3">
+      <div class="modal-body px-4 py-3" style="max-height:72vh;overflow-y:auto;">
 
+        <!-- Step 1: Search -->
         <div id="stepSearch">
           <div class="d-flex gap-2">
             <input type="text" class="form-control" id="searchInput"
@@ -110,6 +121,7 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
           <div id="searchResults" class="mt-3"></div>
         </div>
 
+        <!-- Step 2: Purpose + Lab -->
         <div id="stepSitin" style="display:none;">
           <div class="stu-panel" id="stuPanel"></div>
           <div class="mb-3">
@@ -124,9 +136,9 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
               <option>Other</option>
             </select>
           </div>
-          <div class="mb-1">
+          <div class="mb-0">
             <label class="form-label" style="font-size:.85rem;font-weight:700;">Laboratory <span class="text-danger">*</span></label>
-            <select class="form-select" id="ss_lab">
+            <select class="form-select" id="ss_lab" onchange="onLabChange()">
               <option value="">— Select Lab —</option>
               <option>524</option>
               <option>526</option>
@@ -138,7 +150,25 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
           </div>
         </div>
 
-      </div>
+        <!-- Step 3: PC picker (shown after lab selected) -->
+        <div id="stepPcPick" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1.5px solid var(--purple-pale);">
+          <div style="font-size:.85rem;font-weight:700;color:var(--purple-deep);margin-bottom:.4rem;">
+            Select PC in Lab <span id="pcPickLabName"></span>
+            <span style="font-size:.75rem;font-weight:500;color:#888;">(optional)</span>
+          </div>
+          <div class="pc-pick-legend">
+            <span><span class="pc-pick-dot" style="background:#bbf7d0;border:1.5px solid #22c55e;"></span> Available</span>
+            <span><span class="pc-pick-dot" style="background:#fecaca;border:1.5px solid #ef4444;"></span> Occupied</span>
+            <span><span class="pc-pick-dot" style="background:#ddd6fe;border:1.5px solid #7c3aed;"></span> Selected</span>
+          </div>
+          <div style="font-size:.72rem;font-weight:600;color:#888;letter-spacing:.08em;text-align:center;background:#f3f4f6;border-radius:6px;padding:.25rem;margin-bottom:.4rem;">▲ FRONT OF LAB</div>
+          <div class="modal-pc-grid" id="modalPcGrid">
+            <div style="grid-column:1/-1;text-align:center;color:#aaa;font-size:.82rem;padding:.5rem;">Loading PCs…</div>
+          </div>
+          <div id="selectedPcInfo" style="min-height:1.6rem;"></div>
+        </div>
+
+      </div><!-- /modal-body -->
 
       <div class="modal-footer border-0 px-4 pb-4 gap-2">
         <div id="footerSearch" class="w-100 d-flex justify-content-end">
@@ -173,8 +203,9 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="sims.js"></script>
 <script>
-var chartInst     = null;
-var selectedStu   = null;
+var chartInst   = null;
+var selectedStu = null;
+var selectedPcNum = null;   // PC chosen in the picker
 
 function api(params) {
   var fd = new FormData();
@@ -184,6 +215,7 @@ function api(params) {
     .then(function(t){ try{return JSON.parse(t);}catch(e){throw new Error(t.substring(0,200));} });
 }
 
+/* ── Stats & Announcements ── */
 function loadStats() {
   api({ action:'get_stats' }).then(function(j) {
     if (!j.success) return;
@@ -209,7 +241,7 @@ function loadAnnouncements() {
     (j.data||[]).forEach(function(a){
       var d  = new Date(a.created_at);
       var ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      list.innerHTML += '<div class="ann-entry"><div style="flex:1;"><div class="ann-meta">CCS Admin | '+ds+'</div><div class="ann-text">'+a.message+'</div></div><button class="ann-delete-btn" onclick="deleteAnnouncement('+a.id+')" title="Delete announcement">&#x2715;</button></div>';
+      list.innerHTML += '<div class="ann-entry"><div style="flex:1;"><div class="ann-meta">CCS Admin | '+ds+'</div><div class="ann-text">'+a.message+'</div></div><button class="ann-delete-btn" onclick="deleteAnnouncement('+a.id+')" title="Delete">&#x2715;</button></div>';
     });
   });
 }
@@ -224,51 +256,55 @@ document.getElementById('postAnnBtn').addEventListener('click', function() {
 });
 
 function deleteAnnouncement(id) {
-  if (!confirm('Are you sure you want to delete this announcement?')) return;
+  if (!confirm('Delete this announcement?')) return;
   api({ action:'delete_announcement', announcement_id:id }).then(function(j){
     simsToast(j.message, j.success);
     if (j.success) loadAnnouncements();
   }).catch(function(e){ simsToast(e.message, false); });
 }
 
+/* ── Modal reset on close ── */
 document.getElementById('searchModal').addEventListener('hidden.bs.modal', function() {
+  resetModal();
+});
+
+function resetModal() {
   selectedStu = null;
-  document.getElementById('searchInput').value    = '';
+  selectedPcNum = null;
+  document.getElementById('searchInput').value       = '';
   document.getElementById('searchResults').innerHTML = '';
-  document.getElementById('ss_purpose').value    = '';
-  document.getElementById('ss_lab').value        = '';
+  document.getElementById('ss_purpose').value        = '';
+  document.getElementById('ss_lab').value            = '';
   document.getElementById('stepSearch').style.display  = '';
   document.getElementById('stepSitin').style.display   = 'none';
+  document.getElementById('stepPcPick').style.display  = 'none';
   document.getElementById('footerSearch').style.display  = '';
   document.getElementById('footerSitin').style.display   = 'none';
   document.getElementById('searchModalTitle').textContent = 'Search Student';
-});
+  document.getElementById('modalPcGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#aaa;font-size:.82rem;padding:.5rem;">Loading PCs…</div>';
+  document.getElementById('selectedPcInfo').innerHTML = '';
+}
 
+/* ── Search ── */
 function runSearch() {
   var q = document.getElementById('searchInput').value.trim();
   if (!q) { simsToast('Please enter an ID number or name.', false); return; }
-
   api({ action:'search_student', query:q }).then(function(j){
     var box = document.getElementById('searchResults');
     box.innerHTML = '';
-
     if (!j.data || !j.data.length) {
       box.innerHTML = '<p class="text-muted mt-1" style="font-size:.88rem;">No students found.</p>';
       return;
     }
-
     j.data.forEach(function(s) {
       var div = document.createElement('div');
       div.className = 'search-result-card';
-
       var sess    = parseInt(s.remaining_session);
       var sessClr = sess > 5 ? '#7c3aed' : sess > 0 ? '#f59e0b' : '#ef4444';
-
       div.innerHTML =
         '<div class="src-name">'+s.id_number+' &mdash; '+s.name+'</div>'+
         '<div class="src-meta">'+s.course+' &bull; Year '+s.year_level+
         ' &bull; <span style="color:'+sessClr+';font-weight:700;">'+sess+' sessions left</span></div>';
-
       div.addEventListener('click', function() { showSitinStep(s); });
       box.appendChild(div);
     });
@@ -280,13 +316,13 @@ document.getElementById('searchInput').addEventListener('keydown', function(e){
   if (e.key === 'Enter') runSearch();
 });
 
+/* ── Show Sit-in step ── */
 function showSitinStep(s) {
-  selectedStu = s;
+  selectedStu   = s;
+  selectedPcNum = null;
   document.getElementById('searchModalTitle').textContent = 'Student Information';
-
-  var sess = parseInt(s.remaining_session);
+  var sess    = parseInt(s.remaining_session);
   var chipCls = sess > 5 ? 'sess-chip ok' : sess > 0 ? 'sess-chip low' : 'sess-chip zero';
-
   document.getElementById('stuPanel').innerHTML =
     '<div class="stu-panel-name">'+s.name+'</div>'+
     '<div class="stu-panel-row"><span class="stu-panel-label">ID Number</span><span class="stu-panel-val">'+s.id_number+'</span></div>'+
@@ -294,22 +330,98 @@ function showSitinStep(s) {
     '<div class="stu-panel-row"><span class="stu-panel-label">Year Level</span><span class="stu-panel-val">'+s.year_level+'</span></div>'+
     '<div class="stu-panel-row"><span class="stu-panel-label">Sessions Left</span>'+
     '<span class="stu-panel-val"><span class="'+chipCls+'">'+sess+'</span></span></div>';
-
   document.getElementById('stepSearch').style.display  = 'none';
   document.getElementById('stepSitin').style.display   = '';
-  document.getElementById('footerSearch').style.display  = 'none';
-  document.getElementById('footerSitin').style.display   = '';
+  document.getElementById('stepPcPick').style.display  = 'none';
+  document.getElementById('footerSearch').style.display = 'none';
+  document.getElementById('footerSitin').style.display  = '';
 }
 
+/* ── Lab dropdown change → load PC grid ── */
+function onLabChange() {
+  var lab = document.getElementById('ss_lab').value;
+  selectedPcNum = null;
+  document.getElementById('selectedPcInfo').innerHTML = '';
+
+  if (!lab) {
+    document.getElementById('stepPcPick').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('pcPickLabName').textContent = lab;
+  document.getElementById('stepPcPick').style.display  = '';
+  document.getElementById('modalPcGrid').innerHTML =
+    '<div style="grid-column:1/-1;text-align:center;color:#aaa;font-size:.82rem;padding:.5rem;">Loading PCs…</div>';
+
+  api({ action:'get_pc_status', lab:lab }).then(function(j) {
+    if (!j.success) {
+      document.getElementById('modalPcGrid').innerHTML =
+        '<div style="grid-column:1/-1;text-align:center;color:#ef4444;font-size:.82rem;padding:.5rem;">Failed to load PCs.</div>';
+      return;
+    }
+    renderModalPcGrid(j.data, lab);
+  }).catch(function(e) {
+    document.getElementById('modalPcGrid').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;color:#ef4444;font-size:.82rem;padding:.5rem;">Error: '+e.message+'</div>';
+  });
+}
+
+function renderModalPcGrid(pcData, lab) {
+  var grid = document.getElementById('modalPcGrid');
+  grid.innerHTML = '';
+
+  var dbMap = {};
+  pcData.forEach(function(pc) { dbMap[parseInt(pc.pc_number)] = pc; });
+
+  for (var i = 1; i <= 50; i++) {
+    var pc          = dbMap[i] || { pc_number: i, is_available: 1 };
+    var isAvailable = (pc.is_available == 1 || pc.is_available === true);
+
+    var seat = document.createElement('div');
+    seat.className   = 'modal-pc-seat' + (isAvailable ? '' : ' occupied');
+    seat.dataset.pc  = i;
+    seat.innerHTML   =
+      '<div class="modal-pc-icon">'+(isAvailable ? '🖥️' : '🔴')+'</div>'+
+      '<div class="modal-pc-num">'+i+'</div>';
+
+    if (isAvailable) {
+      (function(pcNum) {
+        seat.addEventListener('click', function() { selectModalPc(pcNum, lab); });
+      })(i);
+    } else {
+      seat.title = 'PC '+i+' is occupied';
+    }
+    grid.appendChild(seat);
+  }
+}
+
+function selectModalPc(pcNum, lab) {
+  selectedPcNum = pcNum;
+
+  // Update visual selection
+  document.querySelectorAll('.modal-pc-seat').forEach(function(s) {
+    s.classList.remove('selected');
+  });
+  var seat = document.querySelector('.modal-pc-seat[data-pc="'+pcNum+'"]');
+  if (seat) seat.classList.add('selected');
+
+  document.getElementById('selectedPcInfo').innerHTML =
+    '<span class="selected-pc-badge">✓ PC '+pcNum+' selected (Lab '+lab+')</span>';
+}
+
+/* ── Back button ── */
 document.getElementById('backBtn').addEventListener('click', function() {
-  selectedStu = null;
+  selectedStu   = null;
+  selectedPcNum = null;
   document.getElementById('stepSearch').style.display  = '';
   document.getElementById('stepSitin').style.display   = 'none';
-  document.getElementById('footerSearch').style.display  = '';
-  document.getElementById('footerSitin').style.display   = 'none';
+  document.getElementById('stepPcPick').style.display  = 'none';
+  document.getElementById('footerSearch').style.display = '';
+  document.getElementById('footerSitin').style.display  = 'none';
   document.getElementById('searchModalTitle').textContent = 'Search Student';
 });
 
+/* ── Confirm sit-in ── */
 document.getElementById('doSitinFromSearchBtn').addEventListener('click', function() {
   if (!selectedStu) return;
   var purpose = document.getElementById('ss_purpose').value;
@@ -318,27 +430,28 @@ document.getElementById('doSitinFromSearchBtn').addEventListener('click', functi
   if (!lab)     { simsToast('Please select a laboratory.', false); return; }
 
   var btn = this;
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Processing…';
 
-  api({ action:'sitin', id_number:selectedStu.id_number, purpose:purpose, lab:lab })
+  var payload = { action:'sitin', id_number:selectedStu.id_number, purpose:purpose, lab:lab };
+  if (selectedPcNum) payload.pc_number = selectedPcNum;
+
+  api(payload)
     .then(function(j) {
       simsToast(j.message, j.success);
       if (j.success) {
         bootstrap.Modal.getInstance(document.getElementById('searchModal')).hide();
         loadStats();
       } else {
-        btn.disabled = false;
+        btn.disabled    = false;
         btn.textContent = 'Sit In';
       }
     }).catch(function(e) {
       simsToast(e.message, false);
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Sit In';
     });
 });
-
-
 
 loadStats();
 loadAnnouncements();
